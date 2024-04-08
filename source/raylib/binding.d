@@ -34,3 +34,8 @@ void validateRaylibBinding() @nogc nothrow {
         exit(-1);
     }
 }
+
+unittest {
+    // Test to verify that Raylib file-management and filesystem functions are equivalent to the Phobos functions recommended instead.
+
+}

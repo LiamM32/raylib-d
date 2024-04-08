@@ -95,6 +95,69 @@ import raylibd_templates;
 import core.stdc.config;
 import core.stdc.stdarg;
 
+// D overloads of Raylib functions which accept D strings. Functions covered by Phobos are skipped:
+
+void InitWindow(uint width, uint height, string title) { // A rough example of what the generated functions look like (but no types changed other than `char*` to `string`);
+    InitWindow(cast(int)width, cast(int)height, cast(char*)title);
+}
+mixin(MakeStringOverload!SetWindowTitle);
+mixin(MakeStringOverload!LoadShader);
+mixin(MakeStringOverload!LoadShaderFromMemory);
+mixin(MakeStringOverload!GetShaderLocation);
+mixin(MakeStringOverload!GetShaderLocationAttrib);
+mixin(MakeStringOverload!TakeScreenshot);
+mixin(MakeStringOverload!OpenURL);
+mixin(MakeStringOverload!TraceLog);
+mixin(MakeStringOverload!LoadFileData);
+mixin(MakeStringOverload!SaveFileData);
+mixin(MakeStringOverload!ExportDataAsCode);
+// Most file-related functions are skipped, as their uses are already covered by Phobos functions.
+mixin(MakeStringOverload!LoadAutomationEventList);
+mixin(MakeStringOverload!ExportAutomationEventList);
+mixin(MakeStringOverload!SetGamepadMappings);
+mixin(MakeStringOverload!LoadImage);
+mixin(MakeStringOverload!LoadImageRaw);
+mixin(MakeStringOverload!LoadImageSvg);
+mixin(MakeStringOverload!LoadImageAnim);
+mixin(MakeStringOverload!LoadImageFromMemory);
+mixin(MakeStringOverload!ExportImage);
+mixin(MakeStringOverload!ExportImageToMemory);
+mixin(MakeStringOverload!ExportImageAsCode);
+mixin(MakeStringOverload!GenImageText);
+mixin(MakeStringOverload!ImageText);
+mixin(MakeStringOverload!ImageTextEx);
+mixin(MakeStringOverload!ImageDrawText);
+mixin(MakeStringOverload!ImageDrawTextEx);
+mixin(MakeStringOverload!LoadTexture);
+mixin(MakeStringOverload!LoadFont);
+mixin(MakeStringOverload!LoadFontEx);
+mixin(MakeStringOverload!LoadFontFromMemory);
+mixin(MakeStringOverload!ExportFontAsCode);
+mixin(MakeStringOverload!DrawText);
+mixin(MakeStringOverload!DrawTextEx);
+mixin(MakeStringOverload!DrawTextPro);
+mixin(MakeStringOverload!MeasureText);
+mixin(MakeStringOverload!MeasureTextEx);
+mixin(MakeStringOverload!LoadCodepoints);
+mixin(MakeStringOverload!GetCodepointCount);
+mixin(MakeStringOverload!GetCodepoint);
+mixin(MakeStringOverload!GetCodepointNext);
+mixin(MakeStringOverload!GetCodepointPrevious);
+//mixin(MakeStringOverload!CodepointToUTF8);
+mixin(MakeStringOverload!LoadModel);
+mixin(MakeStringOverload!ExportMesh);
+mixin(MakeStringOverload!LoadMaterials);
+mixin(MakeStringOverload!LoadModelAnimations);
+mixin(MakeStringOverload!LoadWave);
+mixin(MakeStringOverload!LoadWaveFromMemory);
+mixin(MakeStringOverload!LoadSound);
+mixin(MakeStringOverload!ExportWave);
+mixin(MakeStringOverload!ExportWaveAsCode);
+mixin(MakeStringOverload!LoadMusicStream);
+mixin(MakeStringOverload!LoadMusicStreamFromMemory);
+
+//mixin(MakeOverloadsWithStrings!this);
+
 extern (C) @nogc nothrow:
 
 // Required for: va_list - Only used by TraceLogCallback
@@ -1294,16 +1357,17 @@ bool SaveFileText(const(char)* fileName, char* text); // Save text data to file 
 //------------------------------------------------------------------
 
 // File system functions
-bool FileExists(const(char)* fileName); // Check if file exists
-bool DirectoryExists(const(char)* dirPath); // Check if a directory path exists
-bool IsFileExtension(const(char)* fileName, const(char)* ext); // Check file extension (including point: .png, .wav)
-int GetFileLength(const(char)* fileName); // Get file length in bytes (NOTE: GetFileSize() conflicts with windows.h)
-const(char)* GetFileExtension(const(char)* fileName); // Get pointer to extension for a filename string (includes dot: '.png')
-const(char)* GetFileName(const(char)* filePath); // Get pointer to filename for a path string
+// Note: Most of these functions are already covered by Phobos functions in `std.file` and `std.path`. In D it's better to use these functions.
+bool FileExists(const(char)* fileName); // Check if file exists. Equivalent to `exists(fileName) && isFile(fileName)` in `std.file`.
+bool DirectoryExists(const(char)* dirPath); // Check if a directory path exists. Equivalent to `exists(fileName) && isDir(fileName)` in `std.file`.
+bool IsFileExtension(const(char)* fileName, const(char)* ext); // Check file extension (including point: .png, .wav). Equivalent to `endsWith` in `std.string` and `std.algorithm.searching`.
+int GetFileLength(const(char)* fileName); // Get file length in bytes (NOTE: GetFileSize() conflicts with windows.h). Equivalent to `cast(int)getSize` from `std.file`.
+const(char)* GetFileExtension(const(char)* fileName); // Get pointer to extension for a filename string (includes dot: '.png'). Equivalent to `extension` in `std.path`, but using C strings.
+const(char)* GetFileName(const(char)* filePath); // Get pointer to filename for a path string. Equivalent to `baseName` in `std.path`.
 const(char)* GetFileNameWithoutExt(const(char)* filePath); // Get filename string without extension (uses static string)
-const(char)* GetDirectoryPath(const(char)* filePath); // Get full path for a given fileName with path (uses static string)
+const(char)* GetDirectoryPath(const(char)* filePath); // Get full path for a given fileName with path (uses static string). Equivalent to `absolutePath`.
 const(char)* GetPrevDirectoryPath(const(char)* dirPath); // Get previous directory path for a given path (uses static string)
-const(char)* GetWorkingDirectory(); // Get current working directory (uses static string)
+const(char)* GetWorkingDirectory(); // Get current working directory (uses static string). Equivalent to `getcwd` in `std.file`.
 const(char)* GetApplicationDirectory(); // Get the directory of the running application (uses static string)
 bool ChangeDirectory(const(char)* dir); // Change working directory, return true on success
 bool IsPathFile(const(char)* path); // Check if a given path is a file or a directory
@@ -1649,6 +1713,7 @@ const(char)* CodepointToUTF8(int codepoint, int* utf8Size); // Encode one codepo
 
 // Text strings management functions (no UTF-8 strings, only byte chars)
 // NOTE: Some strings allocate memory internally for returned strings, just be careful!
+// NOTE: Some of these are equivalent to Phobos functions in `std.string`, which should be used over these.
 int TextCopy(char* dst, const(char)* src); // Copy one string to another, returns bytes copied
 bool TextIsEqual(const(char)* text1, const(char)* text2); // Check if two text string are equal
 uint TextLength(const(char)* text); // Get text length, checks for '\0' ending
@@ -1843,6 +1908,3 @@ void DetachAudioStreamProcessor(AudioStream stream, AudioCallback processor); //
 
 void AttachAudioMixedProcessor(AudioCallback processor); // Attach audio stream processor to the entire audio pipeline, receives the samples as <float>s
 void DetachAudioMixedProcessor(AudioCallback processor); // Detach audio stream processor from the entire audio pipeline
-
-// To generate overloads using `string` arguments instead of `const(char)*`:
-//mixin GenerateOverloadsWithStrings!"raylib";

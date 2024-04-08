@@ -7,6 +7,7 @@ string EnumPrefixes(T)(string oldName, string prefix) {
     string result = "enum " ~ oldName ~ " {\n";
     static foreach(member; __traits(allMembers, T)) {
         result ~= "    " ~ prefix ~ member ~ " = " ~ __traits(getMember, T, member).to!int.to!string ~ ",\n";
+        result ~= "    " ~ member ~ " = " ~ __traits(getMember, T, member).to!int.to!string ~ ",\n";
     }
     return result ~ "}\n";
 }
@@ -19,39 +20,36 @@ string EnumPrefixes(T)(string prefix) {
     return result;
 }
 
-template OverloadWithString(Func) {
-    static if (is(Func == function)) {
-        // Extract function name
-        alias Func FunctionType;
-        enum funcName = __traits(identifier, FunctionType);
+string MakeStringOverload(alias func)() {
+    string def = ReturnType!func.stringof ~" "~ __traits(identifier, func) ~ "(";
 
-        // Extract function parameters
-        alias Params = ParameterTypeTuple!FunctionType;
-
-        // Convert const(char)* to string
-        alias ConvertedParams = staticMap!(ToConstCharPointer, Params);
-
-        // Generate overloaded function signature with string arguments
-        string generateOverload(alias name, alias params)() {
-            string result = "void " ~ name ~ "(";
-            foreach (param; params) {
-                result ~= param.stringof ~ " " ~ __traits(identifier, param) ~ ", ";
-            }
-            result ~= ") {" ~ name ~ "(";
-            foreach (param; params) {
-                result ~= "toStringz(" ~ __traits(identifier, param) ~ "), ";
-            }
-            result ~= "); }";
-            return result;
-        }
-
-        // Generate and mixin the overloaded function definition
-        mixin(generateOverload!(funcName, ConvertedParams));
+    auto paramNames = ParameterIdentifierTuple!func;
+    
+    import std.algorithm.searching;
+    foreach(i, paramType; Parameters!func) {
+        if (paramType.stringof.canFind("char")) def ~= "ref string"; // Made a reference so that D string literals know to use the base version of the function and not this one.
+        else def ~= paramType.stringof;
+        def ~= " "~paramNames[i] ~ ", ";
     }
+    def.length -= 2;
+    def ~= ") { ";
+    if (ReturnType!func.stringof != "void") def ~= "return ";
+    def ~= __traits(identifier, func) ~ "(";
+    foreach(i, argument; paramNames) {
+        if (Parameters!func[i].stringof.canFind("char")) def ~= "cast(char*)";
+        def ~= argument ~ ", ";
+    }
+    def.length -= 2;
+    def ~= "); }";
+
+    return def;
 }
 
-template GenerateOverloadsWithStrings(string moduleName) {
-    static foreach (f; __traits(allMembers, mixin(moduleName))) {
-        mixin("OverloadWithString!" ~ f ~ "();");
+template MakeOverloadsWithStrings(string moduleName) {
+    import std.meta;
+    import std.traits;
+    static foreach (func; Filter!(isCallable, __traits(allMembers, mixin(moduleName)))) {
+        mixin(MakeStringOverload!func);
+        pragma(msg, MakeStringOverload!func);
     }
 }

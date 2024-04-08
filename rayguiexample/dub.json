@@ -13,6 +13,14 @@
         "libs": ["raylib"],
         "lflags-posix": ["-L."],
         "lflags-osx": ["-rpath", "@executable_path/"],
-        "buildOptions": ["betterC"]
-
+    "targetType": "executable",
+    "configurations": [
+        {
+            "name": "withGC"
+        },
+        {
+            "name": "betterC",
+            "buildOptions": ["betterC"]
+        }
+    ]
 }

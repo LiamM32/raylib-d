@@ -85,6 +85,7 @@ public
     import raylib.reasings;
     import raylib.raymath;
     import raylib.raymathext;
+    import raylib.rtext;
     import raylib.rcamera;
     import raylib.raylib_types;
     import raylib.binding;
@@ -1619,14 +1620,6 @@ Image GenImageFontAtlas(const(GlyphInfo)* glyphs, Rectangle** glyphRecs, int gly
 void UnloadFontData(GlyphInfo* glyphs, int glyphCount); // Unload font chars info data (RAM)
 void UnloadFont(Font font); // Unload font from GPU memory (VRAM)
 bool ExportFontAsCode(Font font, const(char)* fileName); // Export font as code file, returns true on success
-
-// Text drawing functions
-void DrawFPS(int posX, int posY); // Draw current FPS
-void DrawText(const(char)* text, int posX, int posY, int fontSize, Color color); // Draw text (using default font)
-void DrawTextEx(Font font, const(char)* text, Vector2 position, float fontSize, float spacing, Color tint); // Draw text using font and additional parameters
-void DrawTextPro(Font font, const(char)* text, Vector2 position, Vector2 origin, float rotation, float fontSize, float spacing, Color tint); // Draw text using Font and pro parameters (rotation)
-void DrawTextCodepoint(Font font, int codepoint, Vector2 position, float fontSize, Color tint); // Draw one character (codepoint)
-void DrawTextCodepoints(Font font, const(int)* codepoints, int codepointCount, Vector2 position, float fontSize, float spacing, Color tint); // Draw multiple character (codepoint)
 
 // Text font info functions
 void SetTextLineSpacing(int spacing); // Set vertical line spacing when drawing with line-breaks

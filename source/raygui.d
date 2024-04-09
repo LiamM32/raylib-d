@@ -1,5 +1,8 @@
 module raygui;
 
+import raylibd_templates: isSomeString;
+static assert(isSomeString!(char*), "`isSomeString` returns false on `const(char)*`");
+
 enum enumMixin(Enum) = {
     assert(__ctfe);
     string result;
@@ -1274,7 +1277,7 @@ void GuiGroupBox(Rectangle bounds, const(char)* text)
 }
 
 // Line control
-void GuiLine(Rectangle bounds, const(char)* text)
+void GuiLine(StringType)(Rectangle bounds, StringType text) if(isSomeString!StringType)
 {
     static if (!HasVersion!"RAYGUI_LINE_ORIGIN_SIZE") {
         enum RAYGUI_LINE_MARGIN_TEXT =  12;
@@ -1307,7 +1310,7 @@ void GuiLine(Rectangle bounds, const(char)* text)
 }
 
 // Panel control
-void GuiPanel(Rectangle bounds, const(char)* text) {
+void GuiPanel(StringType = const(char)*)(Rectangle bounds, StringType text) if (isSomeString!StringType) {
     static if (!HasVersion!"RAYGUI_PANEL_BORDER_WIDTH") {
         enum RAYGUI_PANEL_BORDER_WIDTH =   1;
     }
@@ -2525,7 +2528,7 @@ float GuiProgressBar(Rectangle bounds, const(char)* textLeft, const(char)* textR
 }
 
 // Status Bar control
-void GuiStatusBar(Rectangle bounds, const(char)* text) {
+void GuiStatusBar(StringType = const(char)*)(Rectangle bounds, StringType text) if(isSomeString!StringType) {
     GuiState state = guiState;
 
     // Draw control

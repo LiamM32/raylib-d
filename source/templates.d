@@ -55,3 +55,7 @@ template GenerateOverloadsWithStrings(string moduleName) {
         mixin("OverloadWithString!" ~ f ~ "();");
     }
 }
+
+import std.conv;
+import std.typecons;
+enum bool isSomeString(T) = (std.traits.isSomeString!T || is(T == const(char)*) || is(T == char*));

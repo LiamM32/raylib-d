@@ -37,6 +37,7 @@ void main(string[] args) {
             string name = enumMember.object["name"].get!string;
             string value = enumMember.object["value"].get!int.to!string;
             newEnumsModule ~= "    "~name~" = "~value~",";
+            newEnumsModule ~= "    "~name.chompPrefix(prefix)~" = "~name~",";
         }
         newEnumsModule ~= "}";
         newEnumsModule ~= "";

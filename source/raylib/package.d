@@ -496,7 +496,9 @@ struct AutomationEventList
 //----------------------------------------------------------------------------------
 // Enumerators Definition
 //----------------------------------------------------------------------------------
-// System/Window config flags
+
+
+// System/Window config floogs
 // NOTE: Every bit registers one state (use it with bit masks)
 // By default all flags are set to 0
 enum ConfigFlags

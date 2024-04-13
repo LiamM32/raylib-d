@@ -1,6 +1,6 @@
 #!/usr/bin/env dub
 /+ dub.sdl:
-    name "raylib-d_enums_generator"
+    name "raylib-d_updater"
     license "zlib"
     authors "Liam McGillivray"
     versions "deprecateOldEnums" "useSplitter"
@@ -15,6 +15,7 @@ Replace "path/to/raylib" with the path to the raylib directory.
 import std.path;
 import std.file;
 import std.string;
+import std.array;
 import std.algorithm;
 import std.regex;
 import std.json;
@@ -56,17 +57,26 @@ void main(string[] args) {
             break;
     }
 
-    JSONValue[] enumsData = APIData.object["enums"].array;
+    JSONValue[] enumsData = APIData["enums"].array;
     string moduleText = readText("../source/raylib/package.d");
 
-    auto sectionHeader = regex(`//---+\s*\n\s*//\s*([\w\s]+)\s*\n\s*//---+\s*\n)`);
-    version (useSplitter) auto moduleSections = moduleText.splitter!(Yes.keepSeparators)(sectionHeader);
-    else string[] moduleSections = split(moduleText, sectionHeader);
+    auto sectionHeaderRegex = regex(`//---+\s*\n\s*//\s*([\w\s]+)\s*\n\s*//---+\s*\n`);
+    version (useSplitter) auto moduleSections = moduleText.splitter!(Yes.keepSeparators)(sectionHeaderRegex);
+    else string[] moduleSections = split(moduleText, sectionHeaderRegex);
 
-    //writeln("There are ", moduleSections.length, " sections");
-
-    foreach (section; moduleSections) {
-        if (section.canFind(`//---+\s*\n\s*//\s*`)) writeln("Found");
+    string sectionTitle;
+    foreach (section; moduleSections.array) {
+        if (section.matchFirst(sectionHeaderRegex)) {
+            sectionTitle = section.matchFirst(sectionHeaderRegex).back.replace("Definition", "").strip;
+        } else switch (sectionTitle) {
+            case "Enumerators":
+                section.updateEnums(APIData["enums"].array);
+                writeln("Did enumerators");
+                break;
+            default:
+                if (sectionTitle.canFind("Enumerators")) throw new Exception("This didn't work");
+                break;
+        }
     }
 
     std.file.write("package.d", moduleSections.join);
@@ -74,24 +84,48 @@ void main(string[] args) {
 
 void updateEnums(ref string enumsSection, JSONValue[] enumsData) {
     foreach(enumData; enumsData) {
+        auto extendedEnumRegex = regex(`(//[^\n]*\n)(// NOTE:[^\n]*\n(?:\s*//[^\n]*\n))*(\s*enum\s+`~enumData["name"].get!string~`[\s\n]*\{[\s\n]*[^}]*\s*\})`);
+        auto enumDefRegex = regex(`enum\s+`~enumData["name"].get!string~`[\s\n]*\{[\s\n]*[^}]*\s*\}`);
+        //Regex with captures: `enum (\w+)[\s\n]*\{[\s\n]*[(?:(\w*)\s*=\s*(\w*),*)(?://\s*[\w\s]*\n)]*\}`
+        
         string prefix;   
-        foreach (enumMember; enumData.object["values"].array) {
+        foreach (enumMember; enumData["values"].array) {
             if (prefix == "") prefix = enumMember["name"].get!string;
             else prefix = commonPrefix(prefix, enumMember["name"].get!string);
         }
 
-        /*if ("description" in enumData.object) newEnumsModule ~= "// "~enumData.object["description"].get!string;
-        newEnumsModule ~= "enum "~enumData.object["name"].get!string~" {";
-        foreach (enumMember; enumData.object["values"].array) {
-            string name = enumMember.object["name"].get!string;
-            string value = enumMember.object["value"].toString;
-            string description = enumMember.object["description"].get!string;
-            newEnumsModule ~= "    "~name.chompPrefix(prefix)~" = "~value~",  // "~description;
-            version (deprecateOldEnums) newEnumsModule ~= "    deprecated "~name~" = "~value~",";
-            else newEnumsModule ~= "    "~name~" = "~name.chompPrefix(prefix)~",";
+        auto oldDefinitionMatch = enumsSection.matchFirst(extendedEnumRegex);
+        string oldDefinition;
+        if (oldDefinitionMatch) {
+            oldDefinition = oldDefinitionMatch[0];
         }
-        newEnumsModule ~= "}";
-        newEnumsModule ~= "";*/
+        string enumDefinition;
+        if ("description" in enumData.object) {
+            // Watch out for this section to make sure it doesn't replace the wrong comment.
+            string description = "// "~enumData.object["description"].get!string;
+            enumDefinition ~= description;
+        }
+        foreach(note; oldDefinitionMatch.array[1..$-1]) if (note.matchFirst(`//\sNOTE:`)) {
+            enumDefinition ~= note;
+        }
+        enumDefinition ~= "enum "~enumData["name"].get!string~" {";
+        foreach (enumMember; enumData["values"].array) {
+            string name = enumMember["name"].get!string;
+            string value = enumMember["value"].toString;
+            string description = enumMember["description"].get!string;
+            enumDefinition ~= "    "~name.chompPrefix(prefix)~" = "~value~",  // "~description;
+            version (deprecateOldEnums) enumDefinition ~= "    deprecated "~name~" = "~value~",";
+            else enumDefinition ~= "    "~name~" = "~name.chompPrefix(prefix)~",";
+        }
+        enumDefinition ~= "}";
+
+        if (oldDefinitionMatch) {
+            enumsSection.replace(oldDefinitionMatch[0], enumDefinition);
+            writeln("Updated enum "~enumData["name"].get!string);
+        } else {
+            enumsSection ~= `\n` ~ enumDefinition;
+            writeln("Added enum "~enumData["name"].get!string);
+        }
     }
 
     //writeln(moduleSections);
@@ -129,7 +163,7 @@ GitStatus checkGitStatus(string path) {
     import std.process;
     try {
         auto commandResult = executeShell("git rev-parse --is-inside-work-tree");
-        if (commandResult.output.chomp == "false") return GitStatus.no_git;
+        if (commandResult.output.strip == "false") return GitStatus.no_git;
         commandResult = executeShell("git status");
         if (commandResult.output.canFind("../source/raylib/raylib_enums.d")) return GitStatus.file_modified;
         else return GitStatus.not_modified;

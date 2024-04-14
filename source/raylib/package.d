@@ -101,8 +101,7 @@ void InitWindow(uint width, uint height, string title) { // A rough example of w
     InitWindow(cast(int)width, cast(int)height, cast(char*)title);
 }
 version (D_TypeInfo) { //The following functions are not available with string parameters in `betterC` builds:
-    //mixin(MakeStringOverload!SetWindowTitle);
-    mixin GenerateStringOverload!SetWindowTitle;
+    mixin(MakeStringOverload!SetWindowTitle);
     mixin(MakeStringOverload!LoadShader);
     mixin(MakeStringOverload!LoadShaderFromMemory);
     mixin(MakeStringOverload!GetShaderLocation);

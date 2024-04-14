@@ -21,7 +21,7 @@ string EnumPrefixes(T)(string prefix) {
 }
 
 string MakeStringOverload(alias func)() {
-    string def = ReturnType!func.stringof.chain(" ".chain(__traits(identifier, func).chain("(")));
+    string def = ReturnType!func.stringof~" "~__traits(identifier, func)~"(";
 
     auto paramNames = ParameterIdentifierTuple!func;
     
@@ -45,41 +45,42 @@ string MakeStringOverload(alias func)() {
     return def;
 }
 
-template GenerateStringOverload(alias Func) {
-    import std.traits;
+version (generateStringOverload) {
+    template GenerateStringOverload(alias Func) {
+        import std.traits;
 
-    alias FuncType = ReturnType!Func;
-    alias ParamTypes = Parameters!Func;
-    alias ParamNames = ParameterIdentifierTuple!Func;
+        alias FuncType = ReturnType!Func;
+        alias ParamTypes = Parameters!Func;
+        alias ParamNames = ParameterIdentifierTuple!Func;
 
-    alias FunctionArgs = ParameterSequence!(ParamTypes, ParamNames);
+        alias FunctionArgs = ParameterSequence!(ParamTypes, ParamNames);
 
-    static foreach (i, ParamType; ParamTypes) {
-        pragma(msg, "Parameter type: " ~ ParamType.stringof);
+        static foreach (i, ParamType; ParamTypes) {
+            pragma(msg, "Parameter type: " ~ ParamType.stringof);
+        }
     }
-}
 
-template ParametersTuple(alias ParamTypes, alias ParamNames) {
-    //static assert (ParamTypes.length == ParamNames.length);
-    
+    template ParametersTuple(alias ParamTypes, alias ParamNames) {
+        //static assert (ParamTypes.length == ParamNames.length);
+        
+        static foreach (i, ParamType; ParamNames) {
 
-    
-    static foreach (i, ParamType; ParamNames) {
-
+        }
     }
-}
 
-static struct FunctionParameter(T, paramName) {
-    alias ParamType = T;
-    alias ParamName = paramName;
-}
+    static struct FunctionParameter(T, paramName) {
+        alias ParamType = T;
+        alias ParamName = paramName;
+    }
 
-template ParameterSequence(alias Types, alias Names) {
-    static if (Types.empty) alias ParameterSequence = Tuple!();
-    else {
-        alias CurrentParam = FunctionParameter(Types[0], Names[0]);
-        alias RemainingParams = ParameterSequence!(Params[1..$], Names[1..$]);
-        alias ParameterSequence = tuple(CurrentParam, RemainingParams);
+    template ParameterSequence(alias Types, alias Names) {
+        import std.range;
+        static if (Types.empty) alias ParameterSequence = Tuple!();
+        else {
+            alias CurrentParam = FunctionParameter(Types[0], Names[0]);
+            alias RemainingParams = ParameterSequence!(Params[1..$], Names[1..$]);
+            alias ParameterSequence = tuple(CurrentParam, RemainingParams);
+        }
     }
 }
 

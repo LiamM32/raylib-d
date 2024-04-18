@@ -3,7 +3,7 @@
     name "raylib-d_updater"
     license "zlib"
     authors "Liam McGillivray"
-    versions "deprecateOldEnums" "useSplitter"
+    versions "enums_module"
 +/
 
 /* INSTRUCTIONS:
@@ -22,6 +22,7 @@ import std.json;
 import std.conv;
 import std.stdio;
 import std.typecons;
+import core.stdc.ctype;
 
 const string ModulePath = "./package.d";
 
@@ -32,8 +33,6 @@ void main(string[] args) {
         writeln("Please supply a path to the raylib directory.");
         return;
     }
-
-    JSONValue APIData = parseJSON(readText(buildPath(raylib_path,"parser/output/raylib_api.json")));
 
     final switch(checkGitStatus(ModulePath)) {
         case GitStatus.no_git:
@@ -57,6 +56,18 @@ void main(string[] args) {
             break;
     }
 
+    JSONValue APIData = parseJSON(readText(buildPath(raylib_path,"parser/output/raylib_api.json")));
+
+    version (raylib_module) doRaylibModule(APIData);
+    version (enums_module) {
+        string moduleText;
+        if (isFile("../source/raylib/enums.d")) moduleText = readText("../source/raylib/enums.d");
+        moduleText.updateEnums(APIData["enums"].array);
+        std.file.write("../source/raylib/enums.d", moduleText);
+    }
+}
+
+void doRaylibModule (JSONValue APIData) {
     JSONValue[] enumsData = APIData["enums"].array;
     string moduleText = readText("../source/raylib/package.d");
 
@@ -65,12 +76,16 @@ void main(string[] args) {
     else string[] moduleSections = split(moduleText, sectionHeaderRegex);
 
     string sectionTitle;
-    foreach (section; moduleSections.array) {
+    debug {
+        auto oldModule = moduleSections.array;
+    }
+    foreach (ref section; moduleSections.array) {
         if (section.matchFirst(sectionHeaderRegex)) {
             sectionTitle = section.matchFirst(sectionHeaderRegex).back.replace("Definition", "").strip;
         } else switch (sectionTitle) {
             case "Enumerators":
                 section.updateEnums(APIData["enums"].array);
+                debug writeln(section);
                 writeln("Did enumerators");
                 break;
             default:
@@ -78,11 +93,30 @@ void main(string[] args) {
                 break;
         }
     }
+    debug assert(oldModule != moduleSections.array);
 
     std.file.write("package.d", moduleSections.join);
+    //writeln(moduleSections.join);
 }
 
 void updateEnums(ref string enumsSection, JSONValue[] enumsData) {
+    
+    string oldNameToNewName(string name, string prefix) {
+        name = name.chompPrefix(prefix).toLower;
+        name = name.replace(" one", " 1");
+        name = name.replace("_one", "_1");
+        name = name.replace("two", "2");
+        name = name.replace("three", "3");
+        name = name.replace("four", "4");
+        name = name.replace("five", "5");
+        name = name.replace("six", "6");
+        name = name.replace("seven", "7");
+        name = name.replace("eight", "8");
+        name = name.replace("nine", "9");
+        name = name.replace("zero", "0");
+        return name;
+    }
+    
     foreach(enumData; enumsData) {
         auto extendedEnumRegex = regex(`(//[^\n]*\n)(// NOTE:[^\n]*\n(?:\s*//[^\n]*\n))*(\s*enum\s+`~enumData["name"].get!string~`[\s\n]*\{[\s\n]*[^}]*\s*\})`);
         auto enumDefRegex = regex(`enum\s+`~enumData["name"].get!string~`[\s\n]*\{[\s\n]*[^}]*\s*\}`);
@@ -97,38 +131,43 @@ void updateEnums(ref string enumsSection, JSONValue[] enumsData) {
         auto oldDefinitionMatch = enumsSection.matchFirst(extendedEnumRegex);
         string oldDefinition;
         if (oldDefinitionMatch) {
+            assert(enumsSection.canFind(oldDefinitionMatch[0]));
             oldDefinition = oldDefinitionMatch[0];
         }
         string enumDefinition;
         if ("description" in enumData.object) {
             // Watch out for this section to make sure it doesn't replace the wrong comment.
-            string description = "// "~enumData.object["description"].get!string;
+            string description = "// "~enumData.object["description"].get!string~'\n';
             enumDefinition ~= description;
         }
-        foreach(note; oldDefinitionMatch.array[1..$-1]) if (note.matchFirst(`//\sNOTE:`)) {
+        if (oldDefinitionMatch) foreach(note; oldDefinitionMatch.array[1..$-1]) if (note.matchFirst(`//\sNOTE:`)) {
             enumDefinition ~= note;
         }
-        enumDefinition ~= "enum "~enumData["name"].get!string~" {";
+        enumDefinition ~= "enum "~enumData["name"].get!string~" {\n";
         foreach (enumMember; enumData["values"].array) {
-            string name = enumMember["name"].get!string;
+            string oldName = enumMember["name"].get!string;
+            string newName = oldNameToNewName(oldName, prefix);
             string value = enumMember["value"].toString;
             string description = enumMember["description"].get!string;
-            enumDefinition ~= "    "~name.chompPrefix(prefix)~" = "~value~",  // "~description;
-            version (deprecateOldEnums) enumDefinition ~= "    deprecated "~name~" = "~value~",";
-            else enumDefinition ~= "    "~name~" = "~name.chompPrefix(prefix)~",";
+            enumDefinition ~= "    "~newName~" = "~value~",  // "~description~'\n';
+            version (deprecateOldEnums) enumDefinition ~= "    deprecated "~oldName~" = "~value~",\n";
+            else enumDefinition ~= "    "~oldName~" = "~value~",\n";
         }
         enumDefinition ~= "}";
+        writeln(oldDefinition);
 
         if (oldDefinitionMatch) {
-            enumsSection.replace(oldDefinitionMatch[0], enumDefinition);
-            writeln("Updated enum "~enumData["name"].get!string);
+            writeln("\n\n oldDefinition:\n\n"~oldDefinition.strip);
+            writeln("\n\n enumDefinition:\n\n"~enumDefinition);
+            assert(enumsSection.canFind(oldDefinition));
+            enumsSection = enumsSection.replace(oldDefinition.strip, enumDefinition);
         } else {
             enumsSection ~= `\n` ~ enumDefinition;
             writeln("Added enum "~enumData["name"].get!string);
         }
     }
 
-    //writeln(moduleSections);
+    //writeln(enumsSection);
 }
 
 // Removes a section of code bounded by curly braces ("{}") from the input string, and returns what was removed.
@@ -155,6 +194,7 @@ string cutSection(ref uint startIndex, ref string input) {
         }
     }
     string result = input[startIndex..currentPosition];
+    writeln("startIndex: ", startIndex, " currentPosition: ", currentPosition);
     input = input[0..startIndex] ~ input[currentPosition..$];
     return result;
 }

@@ -3741,7 +3741,7 @@ static if (!HasVersion!"RAYGUI_STANDALONE") {
                 imFont.data = DecompressData(cast(ubyte*)compData, fontImageCompSize, &dataUncompSize);
 
                 // Security check, dataUncompSize must match the provided fontImageUncompSize
-                if (dataUncompSize != fontImageUncompSize) RAYGUI_LOG("WARNING: Uncompressed font atlas image data could be corrupted");
+                if (dataUncompSize != fontImageUncompSize) printf("WARNING: Uncompressed font atlas image data could be corrupted");
 
                 free(compData);
             }
@@ -3783,6 +3783,10 @@ static if (!HasVersion!"RAYGUI_STANDALONE") {
             // Set font texture source rectangle to be used as white texture to draw shapes
             // NOTE: This way, all gui can be draw using a single draw call
             if ((whiteRec.width != 0) && (whiteRec.height != 0)) SetShapesTexture(font.texture, whiteRec);
+
+            // D Note: This was added for safety.
+            free(font.recs);
+            free(font.glyphs);
         }
 }
     }
@@ -3800,7 +3804,7 @@ private int GetTextWidth(const(char)* text) {
     {
         if (text[0] == '#')
         {
-            for (int i = 1; (text[i] != '\0') && (i < 5); i++)
+            for (int i = 1; (i < 5) && (text[i] != '\0'); i++)
             {
                 if (text[i] == '#')
                 {
@@ -3859,8 +3863,7 @@ private Rectangle GetTextBounds(int control, Rectangle bounds) {
 
     // Consider TEXT_PADDING properly, depends on control type and TEXT_ALIGNMENT
     switch (control)
-    {
-        case VALUEBOX: break;   // NOTE: ValueBox text value always centered, text padding applies to label
+    {   // D Note: This is a very redundant use of a switch statement, but it's in RayGUI, so it's here.
         default:
         {
             if (GuiGetStyle(control, TEXT_ALIGNMENT) == TEXT_ALIGN_RIGHT) textBounds.x -= GuiGetStyle(control, TEXT_PADDING);
@@ -3869,9 +3872,6 @@ private Rectangle GetTextBounds(int control, Rectangle bounds) {
         }
         break;
     }
-
-    // TODO: Special cases (no label): COMBOBOX, DROPDOWNBOX, LISTVIEW (scrollbar?)
-    // More special cases (label on side): CHECKBOX, SLIDER, VALUEBOX, SPINNER
 
     return textBounds;
 }
@@ -4064,7 +4064,7 @@ static if (!HasVersion!"RAYGUI_NO_ICONS") {
                 }
             }
 
-            posOffsetY += cast(float)GuiGetStyle(DEFAULT, TEXT_SIZE)*1.5f;    // TODO: GuiGetStyle(DEFAULT, TEXT_LINE_SPACING)?
+            posOffsetY += cast(float)GuiGetStyle(DEFAULT, TEXT_SIZE)*1.5f;
             //---------------------------------------------------------------------------------
         }
     }
@@ -4090,7 +4090,7 @@ private void GuiDrawRectangle(Rectangle rec, int borderWidth, Color borderColor,
 
 private void GuiTooltip(Rectangle controlRec)
 {
-    if (!guiLocked && guiTooltip && (guiTooltipPtr != null))
+    if (!guiLocked && guiTooltip && (guiTooltipPtr != null) && !guiSliderDragging)
     {
         Vector2 textSize = MeasureTextEx(GuiGetFont(), guiTooltipPtr, GuiGetStyle(DEFAULT, TEXT_SIZE), GuiGetStyle(DEFAULT, TEXT_SPACING));
 
@@ -4118,7 +4118,7 @@ private const(char)** GuiTextSplit(const(char)* text, char delimiter, int* count
     //      2. Maximum size of text to split is RAYGUI_TEXTSPLIT_MAX_TEXT_SIZE
     // NOTE: Those definitions could be externally provided if required
 
-    // WARNING: HACK: TODO: Review!
+    // TODO: HACK: GuiTextSplit() - Review how textRows are returned to user
     // textRow is an externally provided array of integers that stores row number for every splitted string
 
     static if (!HasVersion!"RAYGUI_TEXTSPLIT_MAX_ITEMS") {
@@ -4329,7 +4329,7 @@ static int GuiScrollBar(Rectangle bounds, int value, int minValue, int maxValue)
         
         // Make sure the slider won't get outside of the scrollbar
         sliderSize = (sliderSize >= scrollbar.height)? (cast(int)scrollbar.height - 2) : sliderSize;
-        slider = Rectangle( cast(float)bounds.x + GuiGetStyle(SCROLLBAR, BORDER_WIDTH) + GuiGetStyle(SCROLLBAR, SCROLL_SLIDER_PADDING), scrollbar.y + cast(int)((cast(float)(value - minValue)/valueRange)*(scrollbar.height - sliderSize)), cast(float)bounds.width - 2*(GuiGetStyle(SCROLLBAR, BORDER_WIDTH) + GuiGetStyle(SCROLLBAR, SCROLL_SLIDER_PADDING)), cast(float)sliderSize );
+        slider = Rectangle(cast(float)bounds.x + GuiGetStyle(SCROLLBAR, BORDER_WIDTH) + GuiGetStyle(SCROLLBAR, SCROLL_SLIDER_PADDING), scrollbar.y + cast(int)((cast(float)(value - minValue)/valueRange)*(scrollbar.height - sliderSize)), cast(float)bounds.width - 2*(GuiGetStyle(SCROLLBAR, BORDER_WIDTH) + GuiGetStyle(SCROLLBAR, SCROLL_SLIDER_PADDING)), cast(float)sliderSize );
     }
     else    // horizontal
     {
@@ -4347,9 +4347,27 @@ static int GuiScrollBar(Rectangle bounds, int value, int minValue, int maxValue)
     {
         Vector2 mousePoint = GetMousePosition();
 
-        if (CheckCollisionPointRec(mousePoint, bounds))
+        if (guiSliderDragging) // Keep dragging outside of bounds
+        {
+            if (IsMouseButtonDown(MOUSE_LEFT_BUTTON))
+            {
+                if (CHECK_BOUNDS_ID(bounds, guiSliderActive))
+                {
+                    if (isVertical) value += cast(int)(GetMouseDelta().y/(scrollbar.height - slider.height)*valueRange);
+                    else value += cast(int)(GetMouseDelta().x/(scrollbar.width - slider.width)*valueRange);
+                }
+            }
+            else
+            {
+                guiSliderDragging = false;
+                guiSliderActive = Rectangle.init;
+            }
+        }
+        else if (CheckCollisionPointRec(mousePoint, bounds))
         {
             state = STATE_FOCUSED;
+            guiSliderDragging = true;
+            guiSliderActive = bounds; // Store bounds as an identifier when dragging starts
 
             // Handle mouse wheel
             int wheel = cast(int)GetMouseWheelMove();
@@ -4581,28 +4599,31 @@ private const(char)* CodepointToUTF8(int codepoint, int* byteSize) {
 private int GetCodepointNext(const(char)* text, int* codepointSize) {
     const(char)* ptr = text;
     int codepoint = 0x3f;       // Codepoint (defaults to '?')
-    *codepointSize = 0;
+    *codepointSize = 1;
 
     // Get current codepoint and bytes processed
     if (0xf0 == (0xf8 & ptr[0]))
     {
         // 4 byte UTF-8 codepoint
+        if(((ptr[1] & 0xC0) ^ 0x80) || ((ptr[2] & 0xC0) ^ 0x80) || ((ptr[3] & 0xC0) ^ 0x80)) { return codepoint; } //10xxxxxx checks
         codepoint = ((0x07 & ptr[0]) << 18) | ((0x3f & ptr[1]) << 12) | ((0x3f & ptr[2]) << 6) | (0x3f & ptr[3]);
         *codepointSize = 4;
     }
     else if (0xe0 == (0xf0 & ptr[0]))
     {
         // 3 byte UTF-8 codepoint */
+        if(((ptr[1] & 0xC0) ^ 0x80) || ((ptr[2] & 0xC0) ^ 0x80)) { return codepoint; } //10xxxxxx checks
         codepoint = ((0x0f & ptr[0]) << 12) | ((0x3f & ptr[1]) << 6) | (0x3f & ptr[2]);
         *codepointSize = 3;
     }
     else if (0xc0 == (0xe0 & ptr[0]))
     {
         // 2 byte UTF-8 codepoint
+        if((ptr[1] & 0xC0) ^ 0x80) { return codepoint; } //10xxxxxx checks
         codepoint = ((0x1f & ptr[0]) << 6) | (0x3f & ptr[1]);
         *codepointSize = 2;
     }
-    else
+    else if (0x00 == (0x80 & ptr[0]))
     {
         // 1 byte UTF-8 codepoint
         codepoint = ptr[0];
@@ -4611,6 +4632,5 @@ private int GetCodepointNext(const(char)* text, int* codepointSize) {
 
     return codepoint;
 }
-}      // RAYGUI_STANDALONE
+}
 
-//! #endif      // RAYGUI_IMPLEMENTATION
